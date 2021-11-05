@@ -1,0 +1,86 @@
+#!/usr/bin/env zsh
+
+# Golang executor that works with goenv for version manaegment.
+# Will default to the highest availble patch version for a minor.
+# Automaticially updates goenv if the version of Go you desire isn't available.
+# Favors Mage for scripts management.
+# Supports executing scoped binaries with gomodrun directly.
+#
+# Usage:
+#   gor mod download
+#   gor my-file.go
+#   gor mymagescript
+#   gor my-local-binary
+#   gor --help
+
+set -e
+
+function walkuptree() {
+  local DIR=$(pwd)
+  while [ ! -z "$DIR" ] && [ ! -f "$DIR/$1" ]; do
+    DIR="${DIR%\/*}"
+  done
+
+  echo "$DIR/$1"
+}
+
+# A go.mod only has a minor version. This function handles finding the latest patch version available.
+function getPatchVersion() {
+  # Meh...
+  GOENV_VERSIONS_PATH="$(dirname $(which goenv))/$(dirname $(readlink $(which goenv)))/../plugins/go-build/share/go-build"
+  echo `ls $GOENV_VERSIONS_PATH | grep $1 | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | tail -n 1 | sed 's/ //g'`
+}
+
+# Sets up environment variables with speicifc Go version.
+function exportGoPath() {
+  export GO_PATH="$GOENV_ROOT/versions/$GO_PATCH_VERSION"
+  [ ! -d "$GO_PATH" ] && goenv install "$GO_PATCH_VERSION"
+  export PATH="$GO_PATH/bin:$PATH"
+}
+
+if [[ "$1 $2" == "mod init" ]]; then
+  exportGoPath `getPatchVersion 1`
+
+  eval "go $@"
+  exit 0
+fi
+
+GO_MOD=`walkuptree go.mod`
+GO_TOOLS=`walkuptree go.tools.go`
+GO_MAGE=`walkuptree go.magefile.go`
+
+GO_MINOR_VERSION=`cat $GO_MOD | grep 'go ' | head -n 1 | awk '{print $2}'`
+GO_PATCH_VERSION=`getPatchVersion $GO_MINOR_VERSION`
+
+if [[ "$GO_PATCH_VERSION" == "" ]]; then
+  HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade goenv --fetch-HEAD
+  GO_PATCH_VERSION=`getPatchVersion $GO_MINOR_VERSION`
+  if [[ "$GO_PATCH_VERSION" == "" ]]; then
+    echo "Can not find full go version for $GO_MINOR_VERSION"
+    exit 1
+  fi
+fi
+
+exportGoPath "$GO_PATCH_VERSION"
+
+gocmd=""
+if [[ "$1" == *.go ]]; then
+  gocmd="go run $@"
+elif [[ "$1" == "--tidy" ]]; then
+  gocmd="gomodrun --tidy"
+elif [[ "$1" == "gofmt" ]]; then
+  gocmd="gofmt"
+elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "$1"); then
+  gocmd="gomodrun mage $@"
+elif ((cat $GO_TOOLS || echo '') 2>/dev/null | grep '_ "' | awk -F '"' '{print $2}' | rev | cut -d/ -f1 | rev | grep -q "$1"); then
+  gocmd="gomodrun $@"
+else
+  gocmd="go $@"
+fi
+
+# Support passing in stdin.
+if [ ! -t 0 ]; then
+  gocmd="cat - | $gocmd"
+fi
+
+eval "$gocmd"

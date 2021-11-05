@@ -1,0 +1,71 @@
+#!/usr/bin/env zsh
+
+# Nodejs execuator that works with tj/n for version management.
+# Favors running yarn, but will execute `npm install` when necessary.
+# Reads node version from .nvmrc, package.json, or a Dockerfile.
+# Supports javascript (vanilla and babel), and typescript files.
+#
+# Usage:
+#   nor (yarn install / npm install)
+#   nor script.ts
+#   nor script.js
+#   nor add -D my-package
+#   nor my-script
+#   nor my-binary
+#   nor --help
+
+set -e
+
+function walkuptree() {
+  local DIR=$(pwd)
+  while [ ! -z "$DIR" ] && [ ! -f "$DIR/$1" ]; do
+    DIR="${DIR%\/*}"
+  done
+
+  echo "$DIR/$1"
+}
+
+NVMRC_PATH=`walkuptree .nvmrc`
+PACKAGE_JSON_PATH=`walkuptree package.json`
+PACKAGE_LOCK_PATH=`walkuptree package-lock.json`
+YARN_LOCK_PATH=`walkuptree yarn.lock`
+DOCKERFILE_PATH=`walkuptree Dockerfile`
+
+NODE_VERSION=$(
+  cat $NVMRC_PATH 2> /dev/null ||
+  (cat $PACKAGE_JSON_PATH | jq -rc .engines.node) 2> /dev/null ||
+  (cat $DOCKERFILE_PATH | grep 'FROM node' | awk -F ':' '{print $2}' | awk -F '-' '{print $1}' | head -n 1) 2> /dev/null ||
+  echo ""
+)
+if [[ "$NODE_VERSION" == "" ]]; then
+  echo "Can not detect nodejs version. Please create a .nvmrc file to continue."
+  exit 1
+fi
+
+n list | grep -q "$NODE_VERSION" || n install "$NODE_VERSION"
+
+export PATH="$N_PREFIX/n/versions/node/$NODE_VERSION/bin:$PATH"
+
+nodecmd=""
+if [[ "$1" == "" ]] && [ -f "$PACKAGE_LOCK_PATH" ]; then
+  nodecmd="npm i"
+elif [[ "$1" == 'ci' ]] && [ -f "$PACKAGE_LOCK_PATH" ]; then
+  nodecmd="npm $@"
+elif [[ "$1" == *.js ]]; then
+  if (cat $PACKAGE_JSON_PATH | grep -q '@babel/core'); then
+    nodecmd="node -r @babel/register $@"
+  else
+    nodecmd="node $@"
+  fi
+elif [[ "$1" == *.ts ]]; then
+  nodecmd="npx -s zsh ts-node $@"
+else
+  nodecmd="yarn -s $@"
+fi
+
+# Support passing in stdin.
+if [ ! -t 0 ]; then
+  nodecmd="cat - | $nodecmd"
+fi
+
+eval "$nodecmd"
