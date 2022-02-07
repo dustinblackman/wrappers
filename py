@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 
-# Python executor that works with pyenv for version management.
-# Uses poetry as a package manaeger, and handles installing it within a python versions scope for you.
+# Python executor that works with pyenv for for version management.
+# Uses poetry as a package manaeger, and handles installing it within a python version for you.
 # poetry-exec-plugin is installed along side poetry giving you the ability to save scripts in pyproject.toml
 #
 # Usage:
@@ -34,7 +34,9 @@ which poetry | grep -q '.pyenv' || (pip3 install poetry && pip3 install poetry-e
 
 # Execute python script, exec script, poetry command, or any other binary.
 pycmd=""
-if [[ "$1" == *.py ]]; then
+if [[ "$0" == *poetry ]]; then
+  pycmd="poetry $@"
+elif [[ "$1" == *.py ]]; then
   pycmd="poetry run python $@"
 elif (cat $PYPROJECT_PATH | sed -n '/poetry-exec-plugin/,/^\[/p' | grep '=' | awk '{print $1}' || echo '') | grep -q ^"$1"$; then
   [ ! -d "$(dirname $PYPROJECT_PATH)/.venv" ] && poetry install
