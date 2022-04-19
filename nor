@@ -33,7 +33,7 @@ DOCKERFILE_PATH=`walkuptree Dockerfile`
 
 NODE_VERSION=$(
   cat $NVMRC_PATH 2> /dev/null ||
-  (cat $PACKAGE_JSON_PATH | jq -rc .engines.node) 2> /dev/null ||
+  (cat $PACKAGE_JSON_PATH | jq -erc .engines.node) 2> /dev/null ||
   (cat $DOCKERFILE_PATH | grep 'FROM node' | awk -F ':' '{print $2}' | awk -F '-' '{print $1}' | head -n 1) 2> /dev/null ||
   echo ""
 )
