@@ -58,7 +58,7 @@ elif [[ "$1" == *.js ]]; then
     nodecmd="node $@"
   fi
 elif [[ "$1" == *.ts ]]; then
-  nodecmd="npx -s zsh ts-node $@"
+  nodecmd="node -r ts-node/register $@"
 else
   nodecmd="yarn -s $@"
 fi
