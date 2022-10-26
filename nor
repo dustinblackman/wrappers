@@ -46,19 +46,25 @@ n list | grep -q "$NODE_VERSION" || n install "$NODE_VERSION"
 
 export PATH="$N_PREFIX/n/versions/node/$NODE_VERSION/bin:$PATH"
 
-nodecmd=""
+
+nodecmd_args=""
+if [[ "$1" == "debug" ]] && [[ "$2" != "" ]]; then
+  nodecmd_args="--inspect-brk"
+  shift
+fi
+
 if [[ "$1" == "" ]] && [ -f "$PACKAGE_LOCK_PATH" ]; then
   nodecmd="npm i"
 elif [[ "$1" == 'ci' ]] && [ -f "$PACKAGE_LOCK_PATH" ]; then
   nodecmd="npm $@"
 elif [[ "$1" == *.js ]]; then
   if (cat $PACKAGE_JSON_PATH | grep -q '@babel/core'); then
-    nodecmd="node -r @babel/register $@"
+    nodecmd="node -r @babel/register $nodecmd_args $@"
   else
-    nodecmd="node $@"
+    nodecmd="node $nodecmd_args $@"
   fi
 elif [[ "$1" == *.ts ]]; then
-  nodecmd="node -r ts-node/register $@"
+  nodecmd="node -r ts-node/register $nodecmd_args $@"
 else
   nodecmd="yarn -s $@"
 fi
