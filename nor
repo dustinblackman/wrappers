@@ -49,6 +49,10 @@ export PATH="$N_PREFIX/n/versions/node/$NODE_VERSION/bin:$PATH"
 
 nodecmd_args=""
 if [[ "$1" == "debug" ]] && [[ "$2" != "" ]]; then
+  nodecmd_args="--inspect"
+  shift
+fi
+if [[ "$1" == "debug-brk" ]] && [[ "$2" != "" ]]; then
   nodecmd_args="--inspect-brk"
   shift
 fi
