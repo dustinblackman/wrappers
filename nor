@@ -70,7 +70,7 @@ elif [[ "$1" == *.js ]]; then
 elif [[ "$1" == *.ts ]]; then
   nodecmd="node -r ts-node/register $nodecmd_args $@"
 else
-  nodecmd="yarn -s $@"
+  nodecmd="yarn --silent $@"
 fi
 
 # Support passing in stdin.
