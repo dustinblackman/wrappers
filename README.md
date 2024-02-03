@@ -9,7 +9,6 @@ These wrappers help unify and solve most of the headaches I feel, taking care of
 - [nor](./nor) - Node
 - [gor](./gor) - Go
 - [py](./py) - Python
-- [rur](./rur) - Rust
 
 ## License
 
