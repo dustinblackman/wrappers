@@ -46,7 +46,7 @@ if [[ "$1 $2" == "mod init" ]]; then
 fi
 
 GO_MOD=`walkuptree go.mod`
-GO_TOOLS=`walkuptree go.tools.go`
+GO_TOOLS=`walkuptree tools/tools.go`
 GO_MAGE=`walkuptree go.magefile.go`
 
 GO_MINOR_VERSION=`cat $GO_MOD | grep 'go ' | head -n 1 | awk '{print $2}'`
@@ -67,13 +67,13 @@ gocmd=""
 if [[ "$1" == *.go ]]; then
   gocmd="go run $@"
 elif [[ "$1" == "--tidy" ]]; then
-  gocmd="gomodrun --tidy"
+  gocmd="gomodrun -r tools --tidy"
 elif [[ "$1" == "gofmt" ]]; then
   gocmd="gofmt"
 elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "$1"); then
-  gocmd="gomodrun mage $@"
+  gocmd="gomodrun -r tools mage $@"
 elif ((cat $GO_TOOLS || echo '') 2>/dev/null | grep '_ "' | awk -F '"' '{print $2}' | rev | cut -d/ -f1 | rev | grep -q "$1"); then
-  gocmd="gomodrun $@"
+  gocmd="gomodrun -r tools $@"
 else
   gocmd="go $@"
 fi
