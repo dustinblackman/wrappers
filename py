@@ -23,7 +23,7 @@ function walkuptree() {
 
 # Setup Python version
 PYPROJECT_PATH=$(walkuptree pyproject.toml)
-PYENV_VERSION=$((cat $PYPROJECT_PATH | grep 'python =' | awk -F '"' '{print $2}') 2> /dev/null || python3 -V | awk '{print $2}')
+PYENV_VERSION=$((cat $PYPROJECT_PATH | grep '^python =' | awk -F '"' '{print $2}') 2> /dev/null || python3 -V | awk '{print $2}')
 
 PYENV_VERSION_BIN="$PYENV_ROOT/versions/$PYENV_VERSION/bin"
 [ ! -d "$PYENV_VERSION_BIN" ] && pyenv install "$PYENV_VERSION"
