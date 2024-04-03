@@ -30,7 +30,7 @@ PYENV_VERSION_BIN="$PYENV_ROOT/versions/$PYENV_VERSION/bin"
 export PATH="$PYENV_VERSION_BIN:$PATH"
 
 # Setup Poetry and poetry-exec-plugin
-which poetry | grep -q '.pyenv' || (pip3 install poetry && pip3 install poetry-exec-plugin && poetry config virtualenvs.in-project true)
+which poetry | grep -q '.pyenv' || (pip3 install poetry && poetry config virtualenvs.in-project true)
 
 # Execute python script, exec script, poetry command, or any other binary.
 pycmd=""
