@@ -1,10 +1,8 @@
 #!/usr/bin/env zsh
 
-# Golang executor that works with goenv for version manaegment.
-# Will default to the highest availble patch version for a minor.
-# Automaticially updates goenv if the version of Go you desire isn't available.
+# Golang executor that works with Go's official version management installers.
 # Favors Mage for scripts management.
-# Supports executing scoped binaries with gomodrun directly.
+# Supports executing scoped binaries with gomodrun directly for tools stored in root/tools/
 #
 # Usage:
 #   gor mod download
@@ -24,54 +22,63 @@ function walkuptree() {
   echo "$DIR/$1"
 }
 
-# A go.mod only has a minor version. This function handles finding the latest patch version available.
-function getPatchVersion() {
-  # Meh...
-  GOENV_VERSIONS_PATH="$(dirname $(which goenv))/$(dirname $(readlink $(which goenv)))/../plugins/go-build/share/go-build"
-  echo `ls $GOENV_VERSIONS_PATH | grep $1 | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n | tail -n 1 | sed 's/ //g'`
-}
-
-# Sets up environment variables with speicifc Go version.
-function exportGoPath() {
-  export GO_PATH="$GOENV_ROOT/versions/$GO_PATCH_VERSION"
-  [ ! -d "$GO_PATH" ] && goenv install "$GO_PATCH_VERSION"
-  export PATH="$GO_PATH/bin:$PATH"
-}
-
 if [[ "$1 $2" == "mod init" ]]; then
-  exportGoPath `getPatchVersion 1`
-
-  eval "go $@"
+  go "$@"
   exit 0
 fi
 
 GO_MOD=`walkuptree go.mod`
 GO_TOOLS=`walkuptree tools/tools.go`
 GO_MAGE=`walkuptree go.magefile.go`
+GO_VERSION=`cat $GO_MOD | grep 'go ' | head -n 1 | awk '{print $2}'`
 
-GO_MINOR_VERSION=`cat $GO_MOD | grep 'go ' | head -n 1 | awk '{print $2}'`
-GO_PATCH_VERSION=`getPatchVersion $GO_MINOR_VERSION`
-
-if [[ "$GO_PATCH_VERSION" == "" ]]; then
-  HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade goenv --fetch-HEAD
-  GO_PATCH_VERSION=`getPatchVersion $GO_MINOR_VERSION`
-  if [[ "$GO_PATCH_VERSION" == "" ]]; then
-    echo "Can not find full go version for $GO_MINOR_VERSION"
-    exit 1
-  fi
+# If Go is not setup in path correctly, set it here.
+GOBINPATH="$(go env GOPATH)/bin"
+if ! (echo "$PATH" | grep -q "$GOBINPATH"); then
+  export PATH="$GOBINPATH:$PATH"
 fi
 
-exportGoPath "$GO_PATCH_VERSION"
+# Install GoModRun if not installed.
+if ! (which gomodrun 2>&1 >/dev/null); then
+  >&2 echo "Installing GoModRun"
+  (
+      curl -L "https://github.com/dustinblackman/gomodrun/archive/refs/heads/master.tar.gz" | tar zxvf - -C /tmp
+      cd /tmp/gomodrun-master/cmd/gomodrun
+      go build -o "$GOBINPATH/gomodrun"
+      cd ~
+      rm -rf /tmp/gomodrun-master/
+  )
+fi
+
+# Download Go version installer
+if ! (which "go${GO_VERSION}" 2>&1 >/dev/null); then
+  >&2 echo "Preparing Go version ${GO_VERSION}"
+  go install "golang.org/dl/go${GO_VERSION}@latest"
+fi
+
+# Download Go version
+if ! ("go${GO_VERSION}" --help 2>&1 | grep -q 'Go is a tool'); then
+  >&2 echo "Installing Go version ${GO_VERSION}"
+  "go${GO_VERSION}" download
+fi
+
+# Put the correct Go version at the top of the path.
+VERSIONEDGOROOT=$("go${GO_VERSION}" env GOROOT)
+export PATH="$VERSIONEDGOROOT/bin:$PATH"
+export GOROOT="$VERSIONEDGOROOT"
 
 gocmd=""
+cleanedparam="$(echo $1 | tr -dc '[:alpha:]' | awk '{print tolower($1)}')"
+
 if [[ "$1" == *.go ]]; then
   gocmd="go run $@"
 elif [[ "$1" == "--tidy" ]]; then
   gocmd="gomodrun -r tools --tidy"
 elif [[ "$1" == "gofmt" ]]; then
   gocmd="gofmt"
-elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "$1"); then
-  gocmd="gomodrun -r tools mage $@"
+elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "$cleanedparam"); then
+  shift;
+  gocmd="gomodrun -r tools mage $cleanedparam $@"
 elif ((cat $GO_TOOLS || echo '') 2>/dev/null | grep '_ "' | awk -F '"' '{print $2}' | rev | cut -d/ -f1 | rev | grep -q "$1"); then
   gocmd="gomodrun -r tools $@"
 else
