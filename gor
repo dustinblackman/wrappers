@@ -41,13 +41,7 @@ fi
 # Install GoModRun if not installed.
 if ! (which gomodrun 2>&1 >/dev/null); then
   >&2 echo "Installing GoModRun"
-  (
-      curl -L "https://github.com/dustinblackman/gomodrun/archive/refs/heads/master.tar.gz" | tar zxvf - -C /tmp
-      cd /tmp/gomodrun-master/cmd/gomodrun
-      go build -o "$GOBINPATH/gomodrun"
-      cd ~
-      rm -rf /tmp/gomodrun-master/
-  )
+  go install github.com/dustinblackman/gomodrun/cmd/gomodrun@master
 fi
 
 # Download Go version installer
