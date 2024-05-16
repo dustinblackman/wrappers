@@ -40,19 +40,19 @@ fi
 
 # Install GoModRun if not installed.
 if ! (which gomodrun 2>&1 >/dev/null); then
-  >&2 echo "Installing GoModRun"
+  >&2 echo "[gor] Installing GoModRun"
   go install github.com/dustinblackman/gomodrun/cmd/gomodrun@master
 fi
 
 # Download Go version installer
 if ! (which "go${GO_VERSION}" 2>&1 >/dev/null); then
-  >&2 echo "Preparing Go version ${GO_VERSION}"
+  >&2 echo "[gor] Preparing Go version ${GO_VERSION}"
   go install "golang.org/dl/go${GO_VERSION}@latest"
 fi
 
 # Download Go version
 if ! ("go${GO_VERSION}" --help 2>&1 | grep -q 'Go is a tool'); then
-  >&2 echo "Installing Go version ${GO_VERSION}"
+  >&2 echo "[gor] Installing Go version ${GO_VERSION}"
   "go${GO_VERSION}" download
 fi
 
