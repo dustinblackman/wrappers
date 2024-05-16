@@ -70,7 +70,7 @@ elif [[ "$1" == "--tidy" ]]; then
   gocmd="gomodrun -r tools --tidy"
 elif [[ "$1" == "gofmt" ]]; then
   gocmd="gofmt"
-elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "$cleanedparam"); then
+elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "^$cleanedparam$"); then
   shift;
   gocmd="gomodrun -r tools mage $cleanedparam $@"
 elif ((cat $GO_TOOLS || echo '') 2>/dev/null | grep '_ "' | awk -F '"' '{print $2}' | rev | cut -d/ -f1 | rev | grep -q "$1"); then
