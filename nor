@@ -30,6 +30,7 @@ PACKAGE_JSON_PATH=`walkuptree package.json`
 PACKAGE_LOCK_PATH=`walkuptree package-lock.json`
 YARN_LOCK_PATH=`walkuptree yarn.lock`
 DOCKERFILE_PATH=`walkuptree Dockerfile`
+NX_PROJECT_PATH=`walkuptree project.json`
 
 NODE_VERSION=$(
   cat $NVMRC_PATH 2> /dev/null ||
@@ -69,6 +70,9 @@ elif [[ "$1" == *.js ]]; then
   fi
 elif [[ "$1" == *.ts ]]; then
   nodecmd="node -r ts-node/register $nodecmd_args $@"
+elif [ -f "$NX_PROJECT_PATH" ]; then
+  project_name=$(cat "$NX_PROJECT_PATH" | jq -rc .name)
+  nodecmd="yarn --ignore-engines --silent nx $1 $project_name"
 else
   nodecmd="yarn --ignore-engines --silent $@"
 fi
