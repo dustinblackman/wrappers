@@ -22,26 +22,72 @@ function walkuptree() {
   echo "$DIR/$1"
 }
 
+GO_MOD=$(walkuptree go.mod)
+GO_TOOLS=$(walkuptree tools/tools.go)
+GO_MAGE=$(walkuptree go.magefile.go)
+GO_VERSION=$(grep 'go ' "$GO_MOD" | head -n 1 | awk '{print $2}')
+
+# Fails silently if no go tools of package is found.
+function getToolsPkgNamePath() {
+   if [[ "$GO_TOOLS" == "" ]]; then
+     echo ""
+     exit 0
+   fi
+
+   tools_project_name="$(grep '^module ' "$GO_TOOLS" | head -n 1 | awk '{print $2}')"
+   pkg_name=$(grep "/$1" "$GO_TOOLS" | head -n 1 | awk -F '"' '{print $2}')
+
+   if [[ "$pkg_name" == "" ]]; then
+     echo ""
+     exit 0
+   fi
+
+  (
+    cd "$(dirname "$GO_TOOLS")"
+    go mod graph | grep "$tools_project_name" | grep "$pkg_name" | head -n 1 | awk '{print $2}'
+  )
+}
+
+function runToolsBin() {
+  bin_name="$1"
+  shift;
+
+  if [[ "$GO_TOOLS" == "" ]]; then
+    >&2 echo "[gor] No tools.go found"
+    exit 1
+  fi
+
+  pkg_name="$(getToolsPkgNamePath "$bin_name")"
+  pkg_name_serialized="$(echo "$pkg_name" | tr '/@' '_')"
+  bin_path="$(dirname "$GO_TOOLS")/.gor/bin/${pkg_name_serialized}/${bin_name}"
+
+  if [[ ! -f "$bin_path" ]]; then
+    mod_path="$(go env GOPATH)/pkg/mod/${pkg_name}"
+    if [[ ! -f "$mod_path" ]]; then
+      go mod download >/dev/null
+    fi
+
+    cd "$mod_path"
+    mkdir -p "$(dirname "$bin_path")"
+    GOWORK="off" go build -o "$bin_path" >/dev/null
+  fi
+
+  if [ ! -t 0 ]; then
+    cat - | "$bin_path" "$@"
+  else
+    "$bin_path" "$@"
+  fi
+}
+
 if [[ "$1 $2" == "mod init" ]]; then
   go "$@"
   exit 0
 fi
 
-GO_MOD=`walkuptree go.mod`
-GO_TOOLS=`walkuptree tools/tools.go`
-GO_MAGE=`walkuptree go.magefile.go`
-GO_VERSION=`cat $GO_MOD | grep 'go ' | head -n 1 | awk '{print $2}'`
-
 # If Go is not setup in path correctly, set it here.
-GOBINPATH="$(go env GOPATH)/bin"
-if ! (echo "$PATH" | grep -q "$GOBINPATH"); then
-  export PATH="$GOBINPATH:$PATH"
-fi
-
-# Install GoModRun if not installed.
-if ! (which gomodrun 2>&1 >/dev/null); then
-  >&2 echo "[gor] Installing GoModRun"
-  go install github.com/dustinblackman/gomodrun/cmd/gomodrun@master
+GO_BIN_PATH="$(go env GOPATH)/bin"
+if ! (echo "$PATH" | grep -q "$GO_BIN_PATH"); then
+  export PATH="$GO_BIN_PATH:$PATH"
 fi
 
 # Download Go version installer
@@ -57,30 +103,33 @@ if ! ("go${GO_VERSION}" --help 2>&1 | grep -q 'Go is a tool'); then
 fi
 
 # Put the correct Go version at the top of the path.
-VERSIONEDGOROOT=$("go${GO_VERSION}" env GOROOT)
-export PATH="$VERSIONEDGOROOT/bin:$PATH"
-export GOROOT="$VERSIONEDGOROOT"
+VERSIONED_GO_ROOT=$("go${GO_VERSION}" env GOROOT)
+export PATH="$VERSIONED_GO_ROOT/bin:$PATH"
+export GOROOT="$VERSIONED_GO_ROOT"
 
 gocmd=""
-cleanedparam="$(echo $1 | tr -dc '[:alpha:]' | awk '{print tolower($1)}')"
+is_tools="false"
+mage_cleaned_params="$(echo "$1" | tr -dc '[:alpha:]' | awk '{print tolower($1)}')"
 
 if [[ "$1" == *.go ]]; then
   gocmd="go run $@"
-elif [[ "$1" == "--tidy" ]]; then
-  gocmd="gomodrun -r tools --tidy"
+elif [[ "$1" == "--gor-bin-find" ]]; then
+  gocmd="getToolsPkgNamePath $2"
 elif [[ "$1" == "gofmt" ]]; then
   gocmd="gofmt"
-elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "^$cleanedparam$"); then
+elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "^$mage_cleaned_params$"); then
   shift;
-  gocmd="gomodrun -r tools mage $cleanedparam $@"
-elif ((cat $GO_TOOLS || echo '') 2>/dev/null | grep '_ "' | awk -F '"' '{print $2}' | awk -F '/' '{print $3}' | grep -q "$1"); then
-  gocmd="gomodrun -r tools $@"
+  is_tools="true"
+  gocmd="runToolsBin mage $mage_cleaned_params $@"
+elif [[ "$(getToolsPkgNamePath "$1")" != "" ]]; then
+  is_tools="true"
+  gocmd="runToolsBin $@"
 else
   gocmd="go $@"
 fi
 
 # Support passing in stdin.
-if [ ! -t 0 ]; then
+if [[ "$is_tools" == "false" ]] && [ ! -t 0 ]; then
   gocmd="cat - | $gocmd"
 fi
 
