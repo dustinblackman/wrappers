@@ -71,7 +71,10 @@ function runToolsBin() {
   if [[ ! -f "$bin_path" ]]; then
     mod_path="$(go env GOPATH)/pkg/mod/${pkg_name}"
     if [[ ! -d "$mod_path" ]]; then
-      go mod download >/dev/null
+      (
+        cd "$(dirname "$GO_TOOLS")"
+        go mod download >/dev/null
+      )
     fi
 
     cd "$mod_path"
