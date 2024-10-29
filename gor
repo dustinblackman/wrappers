@@ -69,17 +69,17 @@ function runToolsBin() {
   bin_path="$(dirname "$GO_TOOLS")/.gor/bin/${pkg_name_serialized}/${bin_name}"
 
   if [[ ! -f "$bin_path" ]]; then
-    mod_path="$(go env GOPATH)/pkg/mod/${pkg_name}"
-    if [[ ! -d "$mod_path" ]]; then
-      (
-        cd "$(dirname "$GO_TOOLS")"
-        go mod download >/dev/null
-      )
-    fi
+    (
+        mod_path="$(go env GOPATH)/pkg/mod/${pkg_name}"
+        if [[ ! -d "$mod_path" ]]; then
+          cd "$(dirname "$GO_TOOLS")"
+          go mod download >/dev/null
+        fi
 
-    cd "$mod_path"
-    mkdir -p "$(dirname "$bin_path")"
-    GOWORK="off" go build -o "$bin_path" >/dev/null
+        cd "$mod_path"
+        mkdir -p "$(dirname "$bin_path")"
+        GOWORK="off" go build -o "$bin_path" >/dev/null
+    )
   fi
 
   if [ ! -t 0 ]; then
