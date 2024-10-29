@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 
 # Golang executor that works with Go's official version management installers.
 # Favors Mage for scripts management.
@@ -15,7 +15,7 @@ set -e
 
 function walkuptree() {
   local DIR=$(pwd)
-  while [ ! -z "$DIR" ] && [ ! -f "$DIR/$1" ]; do
+  while [ -n "$DIR" ] && [ ! -f "$DIR/$1" ]; do
     DIR="${DIR%\/*}"
   done
 
@@ -25,45 +25,52 @@ function walkuptree() {
 GO_MOD=$(walkuptree go.mod)
 GO_TOOLS=$(walkuptree tools/tools.go)
 GO_MAGE=$(walkuptree go.magefile.go)
-GO_VERSION=$(grep 'go ' "$GO_MOD" | head -n 1 | awk '{print $2}')
+GO_VERSION=$(awk '/^go / {print $2; exit}' "$GO_MOD")
 
 # Fails silently if no go tools of package is found.
 function getToolsPkgNamePath() {
-   if [[ "$GO_TOOLS" == "" ]]; then
+   if [[ -z "$GO_TOOLS" ]]; then
      echo ""
      exit 0
    fi
 
-   tools_project_name="$(grep '^module ' "$GO_TOOLS" | head -n 1 | awk '{print $2}')"
-   pkg_name=$(grep "/$1" "$GO_TOOLS" | head -n 1 | awk -F '"' '{print $2}')
+   tools_project_name=$(awk '/^module / {print $2; exit}' "$(dirname "$GO_TOOLS")/go.mod")
+   pkg_name=$(awk -F '"' "/\/$1/ {print \$2; exit}" "$GO_TOOLS")
 
-   if [[ "$pkg_name" == "" ]]; then
+   if [[ -z "$pkg_name" ]]; then
      echo ""
      exit 0
    fi
 
   (
     cd "$(dirname "$GO_TOOLS")"
-    go mod graph | grep "$tools_project_name" | grep "$pkg_name" | head -n 1 | awk '{print $2}'
+    go mod graph | awk -v tools_project_name="$tools_project_name" -v pkg_name="$pkg_name" '{
+      split($2, parts, "@");
+      if ($0 ~ tools_project_name && pkg_name ~ parts[1]) {
+        split(pkg_name, cmdparts, parts[1]);
+        print $2""cmdparts[2];
+        exit;
+      }
+    }'
   )
 }
 
 function runToolsBin() {
   bin_name="$1"
-  shift;
+  shift
 
-  if [[ "$GO_TOOLS" == "" ]]; then
+  if [[ -z "$GO_TOOLS" ]]; then
     >&2 echo "[gor] No tools.go found"
     exit 1
   fi
 
-  pkg_name="$(getToolsPkgNamePath "$bin_name")"
-  pkg_name_serialized="$(echo "$pkg_name" | tr '/@' '_')"
+  pkg_name=$(getToolsPkgNamePath "$bin_name")
+  pkg_name_serialized=$(echo "$pkg_name" | tr '/@' '_')
   bin_path="$(dirname "$GO_TOOLS")/.gor/bin/${pkg_name_serialized}/${bin_name}"
 
   if [[ ! -f "$bin_path" ]]; then
     mod_path="$(go env GOPATH)/pkg/mod/${pkg_name}"
-    if [[ ! -f "$mod_path" ]]; then
+    if [[ ! -d "$mod_path" ]]; then
       go mod download >/dev/null
     fi
 
@@ -85,19 +92,19 @@ if [[ "$1 $2" == "mod init" ]]; then
 fi
 
 # If Go is not setup in path correctly, set it here.
-GO_BIN_PATH="$(go env GOPATH)/bin"
-if ! (echo "$PATH" | grep -q "$GO_BIN_PATH"); then
+GO_BIN_PATH=$(go env GOPATH)/bin
+if ! echo "$PATH" | grep -q "$GO_BIN_PATH"; then
   export PATH="$GO_BIN_PATH:$PATH"
 fi
 
 # Download Go version installer
-if ! (which "go${GO_VERSION}" 2>&1 >/dev/null); then
+if ! command -v "go${GO_VERSION}" >/dev/null 2>&1; then
   >&2 echo "[gor] Preparing Go version ${GO_VERSION}"
   go install "golang.org/dl/go${GO_VERSION}@latest"
 fi
 
 # Download Go version
-if ! ("go${GO_VERSION}" --help 2>&1 | grep -q 'Go is a tool'); then
+if ! "go${GO_VERSION}" --help 2>&1 | grep -q 'Go is a tool'; then
   >&2 echo "[gor] Installing Go version ${GO_VERSION}"
   "go${GO_VERSION}" download
 fi
@@ -109,7 +116,7 @@ export GOROOT="$VERSIONED_GO_ROOT"
 
 gocmd=""
 is_tools="false"
-mage_cleaned_params="$(echo "$1" | tr -dc '[:alpha:]' | awk '{print tolower($1)}')"
+mage_cleaned_params=$(echo "$1" | tr -dc '[:alpha:]' | awk '{print tolower($1)}')
 
 if [[ "$1" == *.go ]]; then
   gocmd="go run $@"
@@ -117,11 +124,11 @@ elif [[ "$1" == "--gor-bin-find" ]]; then
   gocmd="getToolsPkgNamePath $2"
 elif [[ "$1" == "gofmt" ]]; then
   gocmd="gofmt"
-elif ((cat $GO_MAGE || echo '') 2>/dev/null | grep '^func ' | awk -F '(' '{print $1}' | awk '{print $2}' | grep '^[A-Z]' | awk '{print tolower($1)}' | grep -q "^$mage_cleaned_params$"); then
-  shift;
+elif awk '/^func / {print $2}' "$GO_MAGE" 2>/dev/null | awk -F '(' '{print $1}' | awk '{print tolower($1)}' | grep -q "^$mage_cleaned_params$"; then
+  shift
   is_tools="true"
   gocmd="runToolsBin mage $mage_cleaned_params $@"
-elif [[ "$(getToolsPkgNamePath "$1")" != "" ]]; then
+elif [[ -n "$(getToolsPkgNamePath "$1")" ]]; then
   is_tools="true"
   gocmd="runToolsBin $@"
 else
